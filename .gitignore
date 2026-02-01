@@ -1,0 +1,45 @@
+# PowerShell and Windows specific
+*.ps1xml
+*.psd1
+*.psm1
+$PROFILE.*
+*.pssc
+*.psc1
+
+# Logs and temporary files
+*.log
+*.tmp
+*.temp
+*~
+
+# System files
+Thumbs.db
+.DS_Store
+Desktop.ini
+
+# Analysis output
+analysis_results/
+memory_dumps/
+output/
+results/
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Build artifacts
+bin/
+obj/
+*.exe
+*.dll
+*.pdb
+
+# Sensitive data
+passwords.txt
+secrets.txt
+credentials.*
+*.key
+*.pfx
+*.p12
