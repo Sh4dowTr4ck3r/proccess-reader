@@ -9,8 +9,27 @@ param(
     
     [switch]$AutoScan,
     
-    [switch]$ShowMemoryInfo
+    [switch]$ShowMemoryInfo,
+    
+    [string]$StringsFile = "strings.txt"
 )
+
+# Global cancellation flag
+$script:CancelRequested = $false
+
+function Test-CancellationRequested {
+    # Check for PowerShell's built-in cancellation
+    try {
+        # This will throw if Ctrl+C was pressed
+        [System.Threading.Thread]::Sleep(0)
+        return $false
+    } catch [System.OperationCanceledException] {
+        Write-Log "Scan cancelled by user (Ctrl+C)"
+        return $true
+    } catch {
+        return $false
+    }
+}
 
 # Add required Windows API functions
 Add-Type -TypeDefinition @"
@@ -165,6 +184,12 @@ function Get-MemoryRegions {
     $totalSize = 0
     
     while ([MemoryReader]::VirtualQueryEx($ProcessHandle, $address, [ref]$mbi, [System.Runtime.InteropServices.Marshal]::SizeOf($mbi)) -ne 0) {
+        # Check for cancellation
+        if (Test-CancellationRequested) {
+            Write-Log "Memory region scan cancelled"
+            break
+        }
+        
         if ($mbi.State -eq [MemoryReader]::MEM_COMMIT) {
             $regionCount++
             $totalSize += $mbi.RegionSize.ToInt64()
@@ -235,8 +260,22 @@ function Search-MemoryForString {
     $searchBytes = [System.Text.Encoding]::ASCII.GetBytes($SearchString)
     
     foreach ($region in $MemoryRegions) {
-        if (-not $region.IsReadable -or $region.Size -gt 0x100000) { # Skip large regions (>1MB)
+        # Check for cancellation
+        if (Test-CancellationRequested) {
+            Write-Log "String search cancelled"
+            break
+        }
+        
+        if (-not $region.IsReadable -or $region.Size -gt 0x50000) { # Skip large regions (>320KB)
             continue
+        }
+        
+        # Progress indicator for larger scans
+        if ($MemoryRegions.Count -gt 50) {
+            $regionIndex = [array]::IndexOf($MemoryRegions, $region)
+            if ($regionIndex % 20 -eq 0) {
+                Write-Host "  Progress: Region $regionIndex of $($MemoryRegions.Count)" -ForegroundColor Gray
+            }
         }
         
         $memResult = Read-ProcessMemory -ProcessHandle $ProcessHandle -Address $region.BaseAddress -Size $region.Size
@@ -277,19 +316,67 @@ function Search-MemoryForString {
 function Invoke-PatternScan {
     param(
         [IntPtr]$ProcessHandle,
-        [PSCustomObject[]]$MemoryRegions
+        [PSCustomObject[]]$MemoryRegions,
+        [string[]]$SearchPatterns
     )
     
     Write-Log "=== Pattern Scanning ==="
+    Write-Log "Scanning for $($SearchPatterns.Count) patterns..."
     
-    $patterns = @("SECRET", "Hello", "C++", "STRUCT_DATA", "COUNTER_")
+    $totalMatches = 0
+    $patternsFound = 0
+    $currentPattern = 0
     
-    foreach ($pattern in $patterns) {
-        Write-Log "Searching for pattern: $pattern"
+    foreach ($pattern in $SearchPatterns) {
+        # Check for cancellation
+        if (Test-CancellationRequested) {
+            Write-Log "Pattern scan cancelled at pattern $currentPattern of $($SearchPatterns.Count)"
+            break
+        }
+        
+        $currentPattern++
+        Write-Host "[$currentPattern/$($SearchPatterns.Count)] Searching for pattern: '$pattern'" -ForegroundColor Cyan
         $results = Search-MemoryForString -ProcessHandle $ProcessHandle -MemoryRegions $MemoryRegions -SearchString $pattern
-        Write-Log "Pattern '$pattern': $($results.Count) matches"
-        Write-Host ""
+        
+        if ($results.Count -gt 0) {
+            $patternsFound++
+            $totalMatches += $results.Count
+            Write-Host "✓ Pattern '$pattern': $($results.Count) matches" -ForegroundColor Green
+        } else {
+            Write-Host "  Pattern '$pattern': No matches" -ForegroundColor Gray
+        }
     }
+    
+    Write-Log "=== Scan Summary ==="
+    Write-Log "Patterns with matches: $patternsFound / $($SearchPatterns.Count)"
+    Write-Log "Total matches found: $totalMatches"
+}
+
+function Get-SearchStrings {
+    param([string]$StringsFile)
+    
+    $strings = @()
+    
+    if (Test-Path $StringsFile) {
+        Write-Log "Loading search strings from: $StringsFile"
+        $content = Get-Content $StringsFile -ErrorAction SilentlyContinue
+        
+        foreach ($line in $content) {
+            $line = $line.Trim()
+            # Skip empty lines and comments
+            if ($line -and -not $line.StartsWith('#')) {
+                $strings += $line
+            }
+        }
+        
+        Write-Log "Loaded $($strings.Count) search patterns from file"
+    } else {
+        Write-Log "Strings file not found: $StringsFile - using default patterns"
+        # Fallback to hardcoded patterns
+        $strings = @("password", "SECRET", "admin", "config", "debug", "error", "http://", "https://")
+    }
+    
+    return $strings
 }
 
 function Show-ProcessInfo {
@@ -340,13 +427,15 @@ try {
             Write-Log "Search completed. Found $($results.Count) matches."
             
         } elseif ($AutoScan) {
-            # Auto-scan for common patterns
-            Invoke-PatternScan -ProcessHandle $processHandle -MemoryRegions $memoryRegions
+            # Auto-scan for patterns from strings file
+            $searchStrings = Get-SearchStrings -StringsFile $StringsFile
+            Invoke-PatternScan -ProcessHandle $processHandle -MemoryRegions $memoryRegions -SearchPatterns $searchStrings
             
         } else {
-            # Default: show basic info and patterns
-            Invoke-PatternScan -ProcessHandle $processHandle -MemoryRegions $memoryRegions
-            Write-Log "Use -AutoScan for detailed scan or -SearchString 'text' to search for specific text."
+            # Default: show basic info and limited patterns
+            $defaultStrings = @("password", "admin", "secret", "debug", "error")
+            Invoke-PatternScan -ProcessHandle $processHandle -MemoryRegions $memoryRegions -SearchPatterns $defaultStrings
+            Write-Log "Use -AutoScan for comprehensive scan with all patterns or -SearchString 'text' to search for specific text."
         }
         
     } finally {

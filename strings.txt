@@ -1,0 +1,145 @@
+# Common strings for process memory scanning
+# Format: one string per line, # for comments
+# Credentials and authentication
+password
+Password
+PASSWORD
+passwd
+login
+admin
+Administrator
+username
+token
+api_key
+secret
+Secret
+SECRET
+auth
+authentication
+
+# Network and communication
+http://
+https://
+ftp://
+localhost
+127.0.0.1
+192.168.
+10.0.0.
+socket
+connect
+server
+client
+port
+proxy
+
+# File paths and system
+C:\Windows
+C:\Program Files
+C:\Users
+%APPDATA%
+%TEMP%
+System32
+kernel32
+ntdll
+user32
+advapi32
+
+# Database and storage
+SELECT
+INSERT
+UPDATE
+DELETE
+database
+mysql
+postgresql
+sqlite
+mongodb
+redis
+connection
+
+# Crypto and security
+RSA
+AES
+SHA256
+MD5
+encrypt
+decrypt
+certificate
+private_key
+public_key
+ssl
+tls
+
+# Development patterns
+malloc
+free
+memcpy
+strcpy
+printf
+debug
+DEBUG
+error
+ERROR
+exception
+
+# Registry and Windows
+HKEY_LOCAL_MACHINE
+HKEY_CURRENT_USER
+SOFTWARE
+SYSTEM
+registry
+regedit
+
+# Common application strings
+config
+configuration
+settings
+options
+version
+build
+license
+key
+serial
+
+# Memory patterns
+heap
+stack
+buffer
+array
+struct
+class
+object
+instance
+
+# Malware indicators
+keylog
+screenshot
+inject
+hook
+payload
+backdoor
+trojan
+virus
+malware
+
+# Browser and web
+chrome
+firefox
+browser
+cookie
+session
+javascript
+XMLHttpRequest
+fetch
+
+# Email and communication
+smtp
+pop3
+imap
+email
+@gmail.com
+@outlook.com
+@yahoo.com
+Subject:
+From:
+To:
